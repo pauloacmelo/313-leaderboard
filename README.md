@@ -46,3 +46,14 @@ npm run deploy
 ```
 
 [bindings]: https://developers.cloudflare.com/pages/functions/bindings/
+
+### TODO
+
+- [ ] Fix type errors
+- [x] Fix routing
+- [x] Move db token to env var
+- [ ] Some authentication
+- [x] Add divisions
+- [x] Page to edit/insert submissions
+- [ ] Make it live using websockets
+- [ ] Animation for ranking change

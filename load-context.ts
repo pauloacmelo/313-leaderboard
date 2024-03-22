@@ -54,7 +54,14 @@ const api = (client: Client) => ({
                 'wod_name', wod_name,
                 'wod_description', wod_description
               )
-            ) wods
+            ) wods,
+            (
+              select 
+                json_group_array(
+                  json_object('division_id', division_id, 'division_name', division_name)
+                )
+              from divisions where competition_id = competitions.competition_id
+            ) divisions
           from competitions
           left join wods on wods.competition_id = competitions.competition_id
           where competition_handle = $competition_handle
@@ -63,7 +70,11 @@ const api = (client: Client) => ({
         args: { competition_handle },
       })
     ).rows[0];
-    return { ...result, wods: JSON.parse(result.wods) };
+    return {
+      ...result,
+      wods: JSON.parse(result.wods),
+      divisions: JSON.parse(result.divisions),
+    };
   },
   loadSubmissionsByHandle: async (competition_handle) => {
     const result = (
@@ -87,7 +98,7 @@ const api = (client: Client) => ({
       await client.execute({
         sql: `
     with athletes as (
-      select distinct athlete as athlete
+      select distinct athlete, division_id
       from submissions
       left join wods on wods.wod_id = submissions.wod_id
       left join competitions on wods.competition_id = competitions.competition_id
@@ -106,13 +117,14 @@ const api = (client: Client) => ({
         (
           select count(*) + 1
           from full_submissions f2
-          where f2.wod_id = f1.wod_id and coalesce(f2.score_number, 0) > coalesce(f1.score_number, 0)
+          where f2.wod_id = f1.wod_id and f2.division_id = f1.division_id and coalesce(f2.score_number, 0) > coalesce(f1.score_number, 0)
         ) wod_rank
       from full_submissions f1
     )
     select
       athlete,
-      row_number() over (order by sum(wod_rank)) rank,
+      division_id,
+      row_number() over (partition by division_id order by sum(wod_rank)) rank,
       sum(wod_rank) points,
       json_group_array(
         json_object(
@@ -126,7 +138,7 @@ const api = (client: Client) => ({
         )
       ) submissions
     from ranked_submissions
-    group by athlete
+    group by athlete, division_id
     order by sum(wod_rank);
     `,
         args: { competition_handle },
