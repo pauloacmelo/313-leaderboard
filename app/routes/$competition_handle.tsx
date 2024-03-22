@@ -118,9 +118,9 @@ export default function Index() {
                     <td data-column={w.wod_name} key={w.wod_id}>
                       {submission?.wod_rank}
                       <br />
-                      {submission.submission_id ? (
+                      {submission?.submission_id ? (
                         <a
-                          href={`/${competition.competition_handle}/add?id=${submission.submission_id}`}
+                          href={`/${competition.competition_handle}/add?id=${submission?.submission_id}`}
                         >
                           {submission?.score_label || "-"}
                         </a>

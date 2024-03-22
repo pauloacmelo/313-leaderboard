@@ -97,20 +97,24 @@ const api = (client: Client) => ({
     const result = (
       await client.execute({
         sql: `
-    with athletes as (
-      select distinct athlete, division_id
+    with best_submissions as (
+      select *, row_number() over (partition by submissions.athlete, submissions.wod_id, submissions.division_id order by score_number desc) submission_rank
       from submissions
       left join wods on wods.wod_id = submissions.wod_id
       left join competitions on wods.competition_id = competitions.competition_id
       where competition_handle = $competition_handle
     ),
+    athletes as (
+      select distinct athlete, division_id
+      from best_submissions
+    ),
     full_submissions as (
       select *
       from wods
       inner join athletes on true
-      full join submissions on wods.wod_id = submissions.wod_id and submissions.athlete = athletes.athlete
+      full join best_submissions on wods.wod_id = best_submissions.wod_id and best_submissions.athlete = athletes.athlete
       left join competitions on wods.competition_id = competitions.competition_id
-      where competition_handle = $competition_handle
+      where submission_rank = 1
     ),
     ranked_submissions as (
       select *,
