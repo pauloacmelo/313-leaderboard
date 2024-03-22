@@ -1,34 +1,38 @@
-import type { MetaFunction } from "@remix-run/cloudflare";
+import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/cloudflare";
+import { useLoaderData } from "@remix-run/react";
 
 export const meta: MetaFunction = () => {
   return [
-    { title: "New Remix App" },
+    { title: "Crossbox 313" },
     {
       name: "description",
-      content: "Welcome to Remix! Using Vite and Cloudflare!",
+      content: "CROSS PARA TODOS. UNINDO PESSOAS. MUDANDO VIDAS. DESDE 2016",
     },
   ];
 };
 
+export const loader = async ({ context }: LoaderFunctionArgs) => {
+  return {
+    competitions: await context.api.loadCompetitions(),
+  };
+};
 export default function Index() {
+  const { competitions } = useLoaderData<typeof loader>();
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", lineHeight: "1.8" }}>
       <h1>Welcome to Remix (with Vite and Cloudflare)</h1>
       <ul>
-        <li>
-          <a
-            target="_blank"
-            href="https://developers.cloudflare.com/pages/framework-guides/deploy-a-remix-site/"
-            rel="noreferrer"
-          >
-            Cloudflare Pages Docs - Remix guide
-          </a>
-        </li>
-        <li>
-          <a target="_blank" href="https://remix.run/docs" rel="noreferrer">
-            Remix Docs
-          </a>
-        </li>
+        {competitions.map((competition) => (
+          <li key={competition.competition_id}>
+            <a
+              target="_blank"
+              href={`/${competition.competition_handle}`}
+              rel="noreferrer"
+            >
+              {competition.competition_name}
+            </a>
+          </li>
+        ))}
       </ul>
     </div>
   );

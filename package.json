@@ -12,9 +12,11 @@
     "typecheck": "tsc",
     "typegen": "wrangler types",
     "preview": "npm run build && wrangler pages dev ./build/client",
-    "build-cf-types": "wrangler types"
+    "build-cf-types": "wrangler types",
+    "db-repl": "turso db shell 313-leaderboard"
   },
   "dependencies": {
+    "@libsql/client": "^0.5.6",
     "@remix-run/cloudflare": "^2.8.1",
     "@remix-run/cloudflare-pages": "^2.8.1",
     "@remix-run/react": "^2.8.1",
