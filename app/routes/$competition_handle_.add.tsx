@@ -102,6 +102,18 @@ export default function Index() {
               </option>
             ))}
           </select>
+          <label htmlFor="stacked-division">Division</label>
+          <select
+            id="stacked-division"
+            name="division_id"
+            defaultValue={submission?.division_id}
+          >
+            {competition.divisions.map((w) => (
+              <option key={w.division_id} value={w.division_id}>
+                {w.division_name}
+              </option>
+            ))}
+          </select>
           <label htmlFor="stacked-score">Score Number</label>
           <input
             type="number"
