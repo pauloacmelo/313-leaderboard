@@ -1,4 +1,4 @@
-import { Client, ResultSet, Row, createClient } from "@libsql/client";
+import { Client, createClient } from "@libsql/client";
 import { type AppLoadContext } from "@remix-run/cloudflare";
 import { type PlatformProxy } from "wrangler";
 
@@ -39,7 +39,145 @@ export const getLoadContext: GetLoadContext = ({ context }) => {
 
 const api = (client: Client) => ({
   loadCompetitions: async () => {
-    const reuslt = (await client.execute(`select * from competitions`)).rows;
-    return reuslt;
+    const result = (await client.execute(`select * from competitions`)).rows;
+    return result;
+  },
+  loadCompetitionByHandle: async (competition_handle) => {
+    const result = (
+      await client.execute({
+        sql: `
+          select
+            competitions.*,
+            json_group_array(
+              json_object(
+                'wod_id', wod_id,
+                'wod_name', wod_name,
+                'wod_description', wod_description
+              )
+            ) wods
+          from competitions
+          left join wods on wods.competition_id = competitions.competition_id
+          where competition_handle = $competition_handle
+          group by competitions.competition_id;
+        `,
+        args: { competition_handle },
+      })
+    ).rows[0];
+    return { ...result, wods: JSON.parse(result.wods) };
+  },
+  loadSubmissionsByHandle: async (competition_handle) => {
+    const result = (
+      await client.execute({
+        sql: `
+          select
+            submissions.*
+          from submissions
+          left join wods on wods.wod_id = submissions.wod_id
+          left join competitions on competitions.competition_id = wods.competition_id
+          where competition_handle = $competition_handle
+          order by wod_id, wod_date desc;
+        `,
+        args: { competition_handle },
+      })
+    ).rows;
+    return result;
+  },
+  loadRankingByHandle: async (competition_handle) => {
+    const result = (
+      await client.execute({
+        sql: `
+    with athletes as (
+      select distinct athlete as athlete
+      from submissions
+      left join wods on wods.wod_id = submissions.wod_id
+      left join competitions on wods.competition_id = competitions.competition_id
+      where competition_handle = $competition_handle
+    ),
+    full_submissions as (
+      select *
+      from wods
+      inner join athletes on true
+      full join submissions on wods.wod_id = submissions.wod_id and submissions.athlete = athletes.athlete
+      left join competitions on wods.competition_id = competitions.competition_id
+      where competition_handle = $competition_handle
+    ),
+    ranked_submissions as (
+      select *,
+        (
+          select count(*) + 1
+          from full_submissions f2
+          where f2.wod_id = f1.wod_id and coalesce(f2.score_number, 0) > coalesce(f1.score_number, 0)
+        ) wod_rank
+      from full_submissions f1
+    )
+    select
+      athlete,
+      row_number() over (order by sum(wod_rank)) rank,
+      sum(wod_rank) points,
+      json_group_array(
+        json_object(
+          'athlete', athlete,
+          'wod_id', wod_id,
+          'wod_name', wod_name,
+          'wod_rank', wod_rank,
+          'submission_id', submission_id,
+          'score_number', score_number,
+          'score_label', score_label
+        )
+      ) submissions
+    from ranked_submissions
+    group by athlete
+    order by sum(wod_rank);
+    `,
+        args: { competition_handle },
+      })
+    ).rows;
+    return result.map((row) => ({
+      ...row,
+      submissions: JSON.parse(row.submissions),
+    }));
+  },
+  saveSubmission: async ({
+    submission_id,
+    athlete,
+    wod_id,
+    score_number,
+    score_label,
+    wod_date,
+  }) => {
+    return submission_id
+      ? await client.execute({
+          sql: `
+        update submissions
+        set
+          athlete = $athlete,
+          wod_id = $wod_id,
+          score_number = $score_number,
+          score_label = $score_label,
+          wod_date = $wod_date
+        where submission_id = $submission_id;
+      `,
+          args: {
+            athlete,
+            wod_id,
+            score_number,
+            score_label,
+            wod_date,
+            submission_id,
+          },
+        })
+      : await client.execute({
+          sql: `
+        insert into submissions (athlete, wod_id, score_number, score_label, wod_date)
+        values ($athlete, $wod_id, $score_number, $score_label, $wod_date);
+      `,
+          args: {
+            athlete,
+            wod_id,
+            score_number,
+            score_label,
+            wod_date,
+          },
+        });
   },
 });
