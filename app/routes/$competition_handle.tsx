@@ -44,8 +44,8 @@ export const loader = async ({
 export default function Index() {
   const { competition, ranking, url_division_id } =
     useLoaderData<typeof loader>();
-  const [division_id, setDivisionId] = useState(
-    parseInt(url_division_id || competition.divisions?.[0]?.division_id)
+  const division_id = parseInt(
+    url_division_id || competition.divisions?.[0]?.division_id
   );
   return (
     <div
@@ -68,7 +68,9 @@ export default function Index() {
         <div>
           <a href="/">Back</a>
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-          <a href={`/${competition.competition_handle}/add`}>
+          <a
+            href={`/${competition.competition_handle}/add?division_id=${division_id}`}
+          >
             Add new submission
           </a>
         </div>
@@ -122,10 +124,16 @@ export default function Index() {
                         <a
                           href={`/${competition.competition_handle}/add?id=${submission?.submission_id}`}
                         >
-                          {submission?.score_label || "-"}
+                          {submission?.score_label
+                            ? `(${submission?.score_label})`
+                            : "-"}
                         </a>
                       ) : (
-                        submission?.score_label || "-"
+                        <a
+                          href={`/${competition.competition_handle}/add?&wod_id=${w.wod_id}&athlete=${r.athlete}&division_id=${r.division_id}`}
+                        >
+                          -
+                        </a>
                       )}
                     </td>
                   );

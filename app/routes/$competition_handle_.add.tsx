@@ -39,7 +39,13 @@ export const loader = async ({
     ? submissions.find(
         (s) => String(s.submission_id) === searchParams.get("id")
       )
-    : null;
+    : {
+        wod_id: searchParams.get("wod_id"),
+        athlete: searchParams.get("athlete"),
+        score_number: searchParams.get("score_number"),
+        score_label: searchParams.get("score_label"),
+        division_id: searchParams.get("division_id"),
+      };
   const athletes = submissions
     .map((s) => s.athlete)
     .reduce((acc, cur) => (acc.indexOf(cur) < 0 ? [...acc, cur] : acc), [])
@@ -78,7 +84,9 @@ export default function Index() {
         action={`/${competition.competition_handle}/add`}
       >
         <fieldset>
-          <legend>Add Submission</legend>
+          <legend>
+            {submission?.submission_id ? "Update" : "Add"} Submission
+          </legend>
           <input
             type="hidden"
             name="submission_id"
@@ -129,7 +137,7 @@ export default function Index() {
           />
           <br />
           <button type="submit" className="pure-button pure-button-primary">
-            Submit
+            {submission?.submission_id ? "Update" : "Submit"}
           </button>
         </fieldset>
       </form>
