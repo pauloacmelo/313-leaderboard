@@ -157,6 +157,7 @@ const api = (client: Client) => ({
     submission_id,
     athlete,
     wod_id,
+    division_id,
     score_number,
     score_label,
     wod_date,
@@ -168,6 +169,7 @@ const api = (client: Client) => ({
         set
           athlete = $athlete,
           wod_id = $wod_id,
+          division_id = $division_id,
           score_number = $score_number,
           score_label = $score_label,
           wod_date = $wod_date
@@ -176,6 +178,7 @@ const api = (client: Client) => ({
           args: {
             athlete,
             wod_id,
+            division_id,
             score_number,
             score_label,
             wod_date,
@@ -184,12 +187,13 @@ const api = (client: Client) => ({
         })
       : await client.execute({
           sql: `
-        insert into submissions (athlete, wod_id, score_number, score_label, wod_date)
-        values ($athlete, $wod_id, $score_number, $score_label, $wod_date);
+        insert into submissions (athlete, wod_id, division_id, score_number, score_label, wod_date)
+        values ($athlete, $wod_id, $division_id, $score_number, $score_label, $wod_date);
       `,
           args: {
             athlete,
             wod_id,
+            division_id,
             score_number,
             score_label,
             wod_date,
