@@ -79,6 +79,7 @@ export default function Index() {
         <ul className="pure-menu-list">
           {competition?.divisions.map((division) => (
             <li
+              key={division.division_id}
               className={`pure-menu-item ${
                 division.division_id === division_id ? "pure-menu-selected" : ""
               }`}
