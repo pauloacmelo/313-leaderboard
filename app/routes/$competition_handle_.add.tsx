@@ -147,9 +147,17 @@ export default function Index() {
 
 export const action = async ({ request, context }: ActionFunctionArgs) => {
   const formData = await request.formData();
-  const [athlete, wod_id, score_number, score_label, submission_id] = [
+  const [
+    athlete,
+    wod_id,
+    division_id,
+    score_number,
+    score_label,
+    submission_id,
+  ] = [
     formData.get("athlete"),
     formData.get("wod_id"),
+    formData.get("division_id"),
     formData.get("score_number"),
     formData.get("score_label"),
     formData.get("submission_id"),
@@ -157,6 +165,7 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
   await context.api.saveSubmission({
     athlete,
     wod_id,
+    division_id,
     score_number,
     score_label,
     wod_date: new Date(),
