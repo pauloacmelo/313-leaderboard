@@ -150,32 +150,3 @@ export default function Index() {
 function MaybeLink({ href, label }: { href: string; label: string }) {
   return href ? <a href={href}>{label}</a> : <span>{label}</span>;
 }
-
-// function groupBy(arr, fn) {
-//   return arr.reduce((acc, cur) => {
-//     const key = fn(cur);
-//     if (!acc[key]) {
-//       acc[key] = [];
-//     }
-//     acc[key].push(cur);
-//     return acc;
-//   }, {});
-// }
-// function sortBy(arr, fn) {
-//   return arr.sort((a, b) => fn(a) - fn(b));
-// }
-// function greatestBy(arr, fn) {
-//   return sortBy(arr, fn)[arr.length - 1];
-// }
-// const ranking = Object.entries(groupBy(submissions, (s) => s.wod_id)).map(
-//   ([wod_id, wod_submissions]) => [
-//     wod_id,
-//     sortBy(
-//       Object.values(groupBy(wod_submissions, (s) => s.athlete)).map(
-//         (wod_athlete_submissions) =>
-//           greatestBy(wod_athlete_submissions, (s) => s.score_number)
-//       ),
-//       (s) => s.score_number
-//     ).map((s, i) => ({ ...s, wod_rank: i + 1 })),
-//   ]
-// );

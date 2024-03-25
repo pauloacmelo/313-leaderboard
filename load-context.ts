@@ -147,7 +147,19 @@ const api = (client: Client) => ({
       await client.execute({
         sql: `
     with best_submissions as (
-      select *, row_number() over (partition by submissions.athlete, submissions.wod_id, submissions.division_id order by score_number desc) submission_rank
+      select submissions.*,
+        (
+          select count(*)+1
+          from submissions s2
+          where s2.athlete = submissions.athlete
+            and s2.wod_id = submissions.wod_id
+            and s2.division_id = submissions.division_id
+            and (
+              s2.scores->0 < submissions.scores->0 or
+              (s2.scores->0 = submissions.scores->0 and s2.scores->1 > submissions.scores->1) or
+              (s2.scores->0 = submissions.scores->0 and s2.scores->1 = submissions.scores->1 and s2.scores->2 < submissions.scores->2)
+            )
+        ) submission_rank
       from submissions
       left join wods on wods.wod_id = submissions.wod_id
       left join competitions on wods.competition_id = competitions.competition_id
@@ -170,7 +182,13 @@ const api = (client: Client) => ({
         (
           select count(*) + 1
           from full_submissions f2
-          where f2.wod_id = f1.wod_id and f2.division_id = f1.division_id and coalesce(f2.score_number, 0) > coalesce(f1.score_number, 0)
+          where f2.wod_id = f1.wod_id
+            and f2.division_id = f1.division_id
+            and (
+              coalesce(f2.scores->0, 'XX:XX') < coalesce(f1.scores->0, 'XX:XX') or
+              (coalesce(f2.scores->0, 'XX:XX') = coalesce(f1.scores->0, 'XX:XX') and coalesce(f2.scores->1, 0) > coalesce(f1.scores->1, 0)) or
+              (coalesce(f2.scores->0, 'XX:XX') = coalesce(f1.scores->0, 'XX:XX') and coalesce(f2.scores->1, 0) = coalesce(f1.scores->1, 0) and coalesce(f2.scores->2, 'XX:XX') < coalesce(f1.scores->2, 'XX:XX'))
+            )
         ) wod_rank
       from full_submissions f1
     )
@@ -187,6 +205,7 @@ const api = (client: Client) => ({
           'wod_rank', wod_rank,
           'submission_id', submission_id,
           'score_number', score_number,
+          'score', scores,
           'score_label', score_label
         )
       ) submissions
