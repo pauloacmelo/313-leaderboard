@@ -11,16 +11,39 @@ export const meta: MetaFunction = () => {
   ];
 };
 
-export const loader = async ({ context }: LoaderFunctionArgs) => {
+export const loader = async ({ context, request }: LoaderFunctionArgs) => {
   return {
     competitions: await context.api.loadCompetitions(),
+    userId: await context.getUserId(),
   };
 };
 export default function Index() {
-  const { competitions } = useLoaderData<typeof loader>();
+  const { competitions, userId } = useLoaderData<typeof loader>();
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif", lineHeight: "1.8" }}>
-      <h1>Crossbox 313</h1>
+    <div
+      style={{
+        fontFamily: "system-ui, sans-serif",
+        lineHeight: "1.8",
+        maxWidth: 1000,
+        margin: "0 auto",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <h1>Crossbox 313</h1>
+
+        <div>
+          {userId ? <a href="/logout">Logout</a> : <a href="/login">Login</a>}
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+          {userId && <a href={`/add`}>Add new competition</a>}
+        </div>
+      </div>
       <ul>
         {competitions.map((competition) => (
           <li key={competition.competition_id}>

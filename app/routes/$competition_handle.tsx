@@ -3,7 +3,7 @@ import type {
   LoaderFunctionArgs,
   MetaFunction,
 } from "@remix-run/cloudflare";
-import { useLoaderData } from "@remix-run/react";
+import { redirect, useLoaderData } from "@remix-run/react";
 import { useState } from "react";
 import styles from "~/styles/table.css?url";
 
@@ -32,17 +32,17 @@ export const loader = async ({
 }: LoaderFunctionArgs) => {
   const { competition_handle: handle } = params;
   const competition = await context.api.loadCompetitionByHandle(handle);
-  // const submissions = await context.api.loadSubmissionsByHandle(handle);
+  if (!competition) return redirect("/");
   const ranking = await context.api.loadRankingByHandle(handle);
   return {
     competition,
-    // submissions,
     ranking,
     url_division_id: new URL(request.url).searchParams.get("division_id"),
+    userId: await context.getUserId(),
   };
 };
 export default function Index() {
-  const { competition, ranking, url_division_id } =
+  const { competition, ranking, url_division_id, userId } =
     useLoaderData<typeof loader>();
   const division_id = parseInt(
     url_division_id || competition.divisions?.[0]?.division_id
@@ -68,16 +68,18 @@ export default function Index() {
         <div>
           <a href="/">Back</a>
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-          <a
-            href={`/${competition.competition_handle}/add?division_id=${division_id}`}
-          >
-            Add new submission
-          </a>
+          {userId && (
+            <a
+              href={`/${competition.competition_handle}/add?division_id=${division_id}`}
+            >
+              Add new submission
+            </a>
+          )}
         </div>
       </div>
       <div className="pure-menu pure-menu-horizontal">
         <ul className="pure-menu-list">
-          {competition?.divisions.map((division) => (
+          {competition?.divisions?.map((division) => (
             <li
               key={division.division_id}
               className={`pure-menu-item ${
@@ -100,7 +102,7 @@ export default function Index() {
             <th>RANK</th>
             <th>ATHLETE</th>
             <th>POINTS</th>
-            {competition.wods.map((w) => (
+            {competition?.wods?.map((w) => (
               <th key={w.wod_id}>{w.wod_name}</th>
             ))}
           </tr>
@@ -117,25 +119,23 @@ export default function Index() {
                   const submission = r.submissions.find(
                     (s) => s.wod_id === w.wod_id
                   );
+                  const label = submission?.score_label
+                    ? `(${submission?.score_label})`
+                    : "-";
                   return (
                     <td data-column={w.wod_name} key={w.wod_id}>
                       {submission?.wod_rank}
                       <br />
-                      {submission?.submission_id ? (
-                        <a
-                          href={`/${competition.competition_handle}/add?id=${submission?.submission_id}`}
-                        >
-                          {submission?.score_label
-                            ? `(${submission?.score_label})`
-                            : "-"}
-                        </a>
-                      ) : (
-                        <a
-                          href={`/${competition.competition_handle}/add?&wod_id=${w.wod_id}&athlete=${r.athlete}&division_id=${r.division_id}`}
-                        >
-                          -
-                        </a>
-                      )}
+                      <MaybeLink
+                        href={
+                          !userId
+                            ? null
+                            : submission?.submission_id
+                            ? `/${competition.competition_handle}/add?id=${submission?.submission_id}`
+                            : `/${competition.competition_handle}/add?&wod_id=${w.wod_id}&athlete=${r.athlete}&division_id=${r.division_id}`
+                        }
+                        label={label}
+                      />
                     </td>
                   );
                 })}
@@ -145,6 +145,10 @@ export default function Index() {
       </table>
     </div>
   );
+}
+
+function MaybeLink({ href, label }: { href: string; label: string }) {
+  return href ? <a href={href}>{label}</a> : <span>{label}</span>;
 }
 
 // function groupBy(arr, fn) {

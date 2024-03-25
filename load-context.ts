@@ -1,5 +1,6 @@
 import { Client, createClient } from "@libsql/client";
-import { type AppLoadContext } from "@remix-run/cloudflare";
+import { type AppLoadContext, SessionData } from "@remix-run/cloudflare";
+import { createCookieSessionStorage } from "@remix-run/node";
 import { type PlatformProxy } from "wrangler";
 
 // When using `wrangler.toml` to configure bindings,
@@ -25,15 +26,39 @@ type GetLoadContext = (args: {
 }) => AppLoadContext;
 
 // Shared implementation compatible with Vite, Wrangler, and Cloudflare Pages
-export const getLoadContext: GetLoadContext = ({ context }) => {
+export const getLoadContext: GetLoadContext = ({ context, request }) => {
   const client = createClient({
     url: "libsql://313-leaderboard-pauloacmelo.turso.io",
     authToken: context.cloudflare.env.TURSO_TOKEN || process.env.TURSO_TOKEN,
   });
+  const { getSession, commitSession, destroySession } =
+    createCookieSessionStorage<SessionData>({
+      // a Cookie from `createCookie` or the CookieOptions to create one
+      cookie: {
+        name: "__session",
+
+        // all of these are optional
+        // domain: "remix.run",
+        // Expires can also be set (although maxAge overrides it when used in combination).
+        // Note that this method is NOT recommended as `new Date` creates only one date on each server deployment, not a dynamic date in the future!
+        //
+        // expires: new Date(Date.now() + 60_000),
+        httpOnly: true,
+        // maxAge: 60,
+        path: "/",
+        sameSite: "lax",
+        secrets: ["s3cret1"],
+        secure: true,
+      },
+    });
   return {
     ...context,
-    // client,
     api: api(client),
+    getSession,
+    commitSession,
+    destroySession,
+    getUserId: async () =>
+      (await getSession(request.headers.get("Cookie"))).get("userId"),
   };
 };
 
@@ -70,11 +95,15 @@ const api = (client: Client) => ({
         args: { competition_handle },
       })
     ).rows[0];
-    return {
-      ...result,
-      wods: JSON.parse(result.wods),
-      divisions: JSON.parse(result.divisions),
-    };
+    return (
+      result && {
+        ...result,
+        ...(result?.wods ? { wods: JSON.parse(result?.wods) } : {}),
+        ...(result?.divisions
+          ? { divisions: JSON.parse(result?.divisions) }
+          : {}),
+      }
+    );
   },
   loadSubmissionsByHandle: async (competition_handle) => {
     const result = (
@@ -91,6 +120,23 @@ const api = (client: Client) => ({
         args: { competition_handle },
       })
     ).rows;
+    return result;
+  },
+  loadSubmissionById: async (submission_id) => {
+    const result = (
+      await client.execute({
+        sql: `
+          select
+            submissions.*
+          from submissions
+          left join wods on wods.wod_id = submissions.wod_id
+          left join competitions on competitions.competition_id = wods.competition_id
+          where submission_id = $submission_id
+          order by wod_id, wod_date desc;
+        `,
+        args: { submission_id },
+      })
+    ).rows[0];
     return result;
   },
   loadRankingByHandle: async (competition_handle) => {
@@ -148,9 +194,9 @@ const api = (client: Client) => ({
         args: { competition_handle },
       })
     ).rows;
-    return result.map((row) => ({
+    return result?.map((row) => ({
       ...row,
-      submissions: JSON.parse(row.submissions),
+      ...(row.submissions ? { submissions: JSON.parse(row.submissions) } : {}),
     }));
   },
   saveSubmission: async ({

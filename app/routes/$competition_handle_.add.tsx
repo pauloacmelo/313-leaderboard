@@ -5,6 +5,7 @@ import type {
   MetaFunction,
 } from "@remix-run/cloudflare";
 import { useLoaderData } from "@remix-run/react";
+import { redirect } from "react-router";
 
 export const meta: MetaFunction = () => {
   return [
@@ -32,13 +33,11 @@ export const loader = async ({
   params,
 }: LoaderFunctionArgs) => {
   const { competition_handle: handle } = params;
+  if (!(await context.getUserId())) return redirect(`/${handle}`);
   const searchParams = new URL(request.url).searchParams;
   const competition = await context.api.loadCompetitionByHandle(handle);
-  const submissions = await context.api.loadSubmissionsByHandle(handle);
   const submission = searchParams.get("id")
-    ? submissions.find(
-        (s) => String(s.submission_id) === searchParams.get("id")
-      )
+    ? await context.api.loadSubmissionById(searchParams.get("id"))
     : {
         wod_id: searchParams.get("wod_id"),
         athlete: searchParams.get("athlete"),
@@ -46,18 +45,14 @@ export const loader = async ({
         score_label: searchParams.get("score_label"),
         division_id: searchParams.get("division_id"),
       };
-  const athletes = submissions
-    .map((s) => s.athlete)
-    .reduce((acc, cur) => (acc.indexOf(cur) < 0 ? [...acc, cur] : acc), [])
-    .sort();
   return {
     competition,
-    athletes,
+    // athletes,
     submission,
   };
 };
 export default function Index() {
-  const { competition, atheletes, submission } = useLoaderData<typeof loader>();
+  const { competition, submission } = useLoaderData<typeof loader>();
   return (
     <div
       style={{
