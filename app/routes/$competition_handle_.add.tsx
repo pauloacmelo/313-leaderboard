@@ -120,6 +120,7 @@ export default function Index() {
           <label htmlFor="stacked-score">Score Number</label>
           <input
             type="number"
+            inputMode="numeric"
             id="stacked-score"
             name="score_number"
             defaultValue={submission?.score_number}
