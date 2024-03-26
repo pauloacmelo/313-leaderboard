@@ -80,7 +80,8 @@ const api = (client: Client) => ({
               json_object(
                 'wod_id', wod_id,
                 'wod_name', wod_name,
-                'wod_description', wod_description
+                'wod_description', wod_description,
+                'wod_config', wod_config
               )
             ) wods,
             (
@@ -101,7 +102,14 @@ const api = (client: Client) => ({
     return (
       result && {
         ...result,
-        ...(result?.wods ? { wods: JSON.parse(result?.wods) } : {}),
+        ...(result?.wods
+          ? {
+              wods: JSON.parse(result?.wods).map((wod) => ({
+                ...wod,
+                wod_config: JSON.parse(wod.wod_config),
+              })),
+            }
+          : {}),
         ...(result?.divisions
           ? { divisions: JSON.parse(result?.divisions) }
           : {}),
@@ -140,7 +148,10 @@ const api = (client: Client) => ({
         args: { submission_id },
       })
     ).rows[0];
-    return result;
+    return {
+      ...result,
+      scores: result.scores ? JSON.parse(result.scores) : result.scores,
+    };
   },
   loadRankingByHandle: async (competition_handle) => {
     const result = (
@@ -178,17 +189,29 @@ const api = (client: Client) => ({
       where submission_rank = 1
     ),
     ranked_submissions as (
-      select *,
+      select f1.*,
         (
-          select count(*) + 1
-          from full_submissions f2
-          where f2.wod_id = f1.wod_id
-            and f2.division_id = f1.division_id
-            and (
-              coalesce(f2.scores->0, 'XX:XX') < coalesce(f1.scores->0, 'XX:XX') or
-              (coalesce(f2.scores->0, 'XX:XX') = coalesce(f1.scores->0, 'XX:XX') and coalesce(f2.scores->1, 0) > coalesce(f1.scores->1, 0)) or
-              (coalesce(f2.scores->0, 'XX:XX') = coalesce(f1.scores->0, 'XX:XX') and coalesce(f2.scores->1, 0) = coalesce(f1.scores->1, 0) and coalesce(f2.scores->2, 'XX:XX') < coalesce(f1.scores->2, 'XX:XX'))
-            )
+          select count(*) + 1 --string_agg(submission_id || ':' || comparison, '|')
+          from (
+            select
+              f2.submission_id, substr(string_agg(nullif(
+                case
+                  when f1.scores->>value = f2.scores->>value then 0
+                  when f1.scores->>value > f2.scores->>value then 1
+                  when f1.scores->>value < f2.scores->>value then -1
+                end * case
+                  when f1.wod_config->value->>'order' = 'asc' then -1
+                  when f1.wod_config->value->>'order' = 'desc' then 1
+                  else  0
+                end, 0), ''), 1, 1) comparison
+            from full_submissions f2
+            left join generate_series(0, json_array_length(f1.wod_config)-1) on true
+            where f2.submission_id != f1.submission_id
+              and f2.wod_id = f1.wod_id
+              and f2.division_id = f1.division_id
+            group by f2.submission_id
+          ) subq
+          where comparison = '-'
         ) wod_rank
       from full_submissions f1
     )
@@ -204,8 +227,7 @@ const api = (client: Client) => ({
           'wod_name', wod_name,
           'wod_rank', wod_rank,
           'submission_id', submission_id,
-          'score_number', score_number,
-          'score', scores,
+          'scores', scores,
           'score_label', score_label
         )
       ) submissions
@@ -226,7 +248,7 @@ const api = (client: Client) => ({
     athlete,
     wod_id,
     division_id,
-    score_number,
+    scores,
     score_label,
     wod_date,
   }) => {
@@ -238,7 +260,7 @@ const api = (client: Client) => ({
           athlete = $athlete,
           wod_id = $wod_id,
           division_id = $division_id,
-          score_number = $score_number,
+          scores = $scores,
           score_label = $score_label,
           wod_date = $wod_date
         where submission_id = $submission_id;
@@ -247,7 +269,7 @@ const api = (client: Client) => ({
             athlete,
             wod_id,
             division_id,
-            score_number,
+            scores,
             score_label,
             wod_date,
             submission_id,
@@ -255,14 +277,14 @@ const api = (client: Client) => ({
         })
       : await client.execute({
           sql: `
-        insert into submissions (athlete, wod_id, division_id, score_number, score_label, wod_date)
-        values ($athlete, $wod_id, $division_id, $score_number, $score_label, $wod_date);
+        insert into submissions (athlete, wod_id, division_id, scores, score_label, wod_date)
+        values ($athlete, $wod_id, $division_id, $scores, $score_label, $wod_date);
       `,
           args: {
             athlete,
             wod_id,
             division_id,
-            score_number,
+            scores,
             score_label,
             wod_date,
           },

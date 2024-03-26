@@ -8,3 +8,5 @@ node_modules
 
 .dev.vars
 .node-version
+
+**/.DS_Store

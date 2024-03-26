@@ -5,6 +5,7 @@ import type {
   MetaFunction,
 } from "@remix-run/cloudflare";
 import { useLoaderData } from "@remix-run/react";
+import { useState } from "react";
 import { redirect } from "react-router";
 
 export const meta: MetaFunction = () => {
@@ -41,8 +42,6 @@ export const loader = async ({
     : {
         wod_id: searchParams.get("wod_id"),
         athlete: searchParams.get("athlete"),
-        score_number: searchParams.get("score_number"),
-        score_label: searchParams.get("score_label"),
         division_id: searchParams.get("division_id"),
       };
   return {
@@ -53,6 +52,10 @@ export const loader = async ({
 };
 export default function Index() {
   const { competition, submission } = useLoaderData<typeof loader>();
+  const [wod_id, setWodId] = useState(
+    submission?.wod_id || competition.wods[0].wod_id
+  );
+  const wod = competition.wods.find((w) => w.wod_id === wod_id);
   return (
     <div
       style={{
@@ -93,18 +96,6 @@ export default function Index() {
             name="athlete"
             defaultValue={submission?.athlete}
           />
-          <label htmlFor="stacked-wod">WOD</label>
-          <select
-            id="stacked-wod"
-            name="wod_id"
-            defaultValue={submission?.wod_id}
-          >
-            {competition.wods.map((w) => (
-              <option key={w.wod_id} value={w.wod_id}>
-                {w.wod_name}
-              </option>
-            ))}
-          </select>
           <label htmlFor="stacked-division">Division</label>
           <select
             id="stacked-division"
@@ -117,14 +108,32 @@ export default function Index() {
               </option>
             ))}
           </select>
-          <label htmlFor="stacked-score">Score Number</label>
-          <input
-            type="number"
-            inputMode="numeric"
-            id="stacked-score"
-            name="score_number"
-            defaultValue={submission?.score_number}
-          />
+          <label htmlFor="stacked-wod">WOD</label>
+          <select
+            id="stacked-wod"
+            name="wod_id"
+            value={wod_id}
+            onChange={(e) => setWodId(parseInt(e.target.value))}
+          >
+            {competition.wods.map((w) => (
+              <option key={w.wod_id} value={w.wod_id}>
+                {w.wod_name}
+              </option>
+            ))}
+          </select>
+          {wod?.wod_config?.map((config, scoreIndex) => (
+            <>
+              <label htmlFor={`stacked-score-${scoreIndex}`}>
+                {config.label}
+              </label>
+              <input
+                {...(config.type === "number" ? { type: "number" } : {})}
+                id={`stacked-score-${scoreIndex}`}
+                name="scores"
+                defaultValue={submission?.scores?.[scoreIndex]}
+              />
+            </>
+          ))}
           <label htmlFor="stacked-label">Score Label</label>
           <input
             id="stacked-label"
@@ -143,26 +152,21 @@ export default function Index() {
 
 export const action = async ({ request, context }: ActionFunctionArgs) => {
   const formData = await request.formData();
-  const [
-    athlete,
-    wod_id,
-    division_id,
-    score_number,
-    score_label,
-    submission_id,
-  ] = [
-    formData.get("athlete"),
-    formData.get("wod_id"),
-    formData.get("division_id"),
-    formData.get("score_number"),
-    formData.get("score_label"),
-    formData.get("submission_id"),
-  ] as string[];
+  const athlete = formData.get("athlete");
+  const wod_id = formData.get("wod_id");
+  const division_id = formData.get("division_id");
+  const scores = JSON.stringify(
+    formData
+      .getAll("scores")
+      .map((s) => (String(parseInt(s)) === s ? parseInt(s) : s))
+  );
+  const score_label = formData.get("score_label");
+  const submission_id = formData.get("submission_id");
   await context.api.saveSubmission({
     athlete,
     wod_id,
     division_id,
-    score_number,
+    scores,
     score_label,
     wod_date: new Date(),
     submission_id,
