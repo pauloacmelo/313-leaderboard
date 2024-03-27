@@ -66,13 +66,13 @@ export default function Index() {
       >
         <h1>{competition.competition_name}</h1>
         <div>
-          <a href="/">Back</a>
+          <a href="/">Voltar</a>
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
           {userId && (
             <a
               href={`/${competition.competition_handle}/add?division_id=${division_id}`}
             >
-              Add new submission
+              Nova súmula
             </a>
           )}
         </div>
@@ -99,9 +99,9 @@ export default function Index() {
       <table>
         <thead>
           <tr>
-            <th>RANK</th>
-            <th>ATHLETE</th>
-            <th>POINTS</th>
+            <th>#</th>
+            <th>ATLETA</th>
+            <th>PTS</th>
             {competition?.wods?.map((w) => (
               <th key={w.wod_id}>{w.wod_name}</th>
             ))}
@@ -112,9 +112,9 @@ export default function Index() {
             .filter((r) => r.division_id === division_id)
             .map((r, i) => (
               <tr key={i}>
-                <td data-column="RANK">{r.rank}</td>
-                <td data-column="ATHLETE">{r.athlete}</td>
-                <td data-column="POINTS">{r.points}</td>
+                <td data-column="#">{r.rank}</td>
+                <td data-column="ATLETA">{r.athlete}</td>
+                <td data-column="PTS">{r.points}</td>
                 {competition.wods.map((w) => {
                   const submission = r.submissions.find(
                     (s) => s.wod_id === w.wod_id

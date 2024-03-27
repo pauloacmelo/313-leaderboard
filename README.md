@@ -52,8 +52,13 @@ npm run deploy
 - [ ] Fix type errors
 - [x] Fix routing
 - [x] Move db token to env var
-- [ ] Some authentication
+- [x] Some authentication
 - [x] Add divisions
+- [x] Localize in PT-BR
 - [x] Page to edit/insert submissions
+- [ ] Improve authentication (email link)
+- [ ] Custom domain
+- [ ] Page to edit/insert competitions
+- [ ] Add Documentation
 - [ ] Make it live using websockets
 - [ ] Animation for ranking change

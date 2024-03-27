@@ -39,9 +39,13 @@ export default function Index() {
         <h1>Crossbox 313</h1>
 
         <div>
-          {userId ? <a href="/logout">Logout</a> : <a href="/login">Login</a>}
+          {userId ? (
+            <a href="/logout">Sair</a>
+          ) : (
+            <a href="/login">Administrar</a>
+          )}
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-          {userId && <a href={`/add`}>Add new competition</a>}
+          {userId && <a href={`/add`}>Novo campeonato</a>}
         </div>
       </div>
       <ul>

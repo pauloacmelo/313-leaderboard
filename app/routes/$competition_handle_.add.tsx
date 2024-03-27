@@ -40,7 +40,8 @@ export const loader = async ({
   const submission = searchParams.get("id")
     ? await context.api.loadSubmissionById(searchParams.get("id"))
     : {
-        wod_id: searchParams.get("wod_id"),
+        wod_id:
+          searchParams.get("wod_id") && parseInt(searchParams.get("wod_id")),
         athlete: searchParams.get("athlete"),
         division_id: searchParams.get("division_id"),
       };
@@ -74,7 +75,7 @@ export default function Index() {
         }}
       >
         <h1>{competition.competition_name}</h1>
-        <a href={`/${competition.competition_handle}`}>Back</a>
+        <a href={`/${competition.competition_handle}`}>Voltar</a>
       </div>
       <form
         className="pure-form pure-form-stacked"
@@ -83,20 +84,20 @@ export default function Index() {
       >
         <fieldset>
           <legend>
-            {submission?.submission_id ? "Update" : "Add"} Submission
+            {submission?.submission_id ? "Editar" : "Nova"} Súmula
           </legend>
           <input
             type="hidden"
             name="submission_id"
             value={submission?.submission_id}
           />
-          <label htmlFor="stacked-athlete">Athlete</label>
+          <label htmlFor="stacked-athlete">Atleta</label>
           <input
             id="stacked-athlete"
             name="athlete"
             defaultValue={submission?.athlete}
           />
-          <label htmlFor="stacked-division">Division</label>
+          <label htmlFor="stacked-division">Categoria</label>
           <select
             id="stacked-division"
             name="division_id"
@@ -131,14 +132,16 @@ export default function Index() {
                 id={`stacked-score-${scoreIndex}`}
                 name="scores"
                 defaultValue={submission?.scores?.[scoreIndex]}
+                placeholder={config.type === "time" ? "12:34" : "123"}
               />
             </>
           ))}
-          <label htmlFor="stacked-label">Score Label</label>
+          <label htmlFor="stacked-label">Descrição ranking</label>
           <input
             id="stacked-label"
             name="score_label"
             defaultValue={submission?.score_label}
+            placeholder="XX reps"
           />
           <br />
           <button type="submit" className="pure-button pure-button-primary">
