@@ -157,23 +157,41 @@ const api = (client: Client) => ({
     const result = (
       await client.execute({
         sql: `
-    with best_submissions as (
-      select submissions.*,
+      with best_submissions as (
+        select f1.*,
         (
-          select count(*)+1
-          from submissions s2
-          where s2.athlete = submissions.athlete
-            and s2.wod_id = submissions.wod_id
-            and s2.division_id = submissions.division_id
-            and (
-              s2.scores->0 < submissions.scores->0 or
-              (s2.scores->0 = submissions.scores->0 and s2.scores->1 > submissions.scores->1) or
-              (s2.scores->0 = submissions.scores->0 and s2.scores->1 = submissions.scores->1 and s2.scores->2 < submissions.scores->2)
-            )
+          select count(*) + 1 --string_agg(submission_id || ':' || comparison, '|')
+          from (
+            select
+              f2.submission_id, substr(string_agg(nullif(
+                case
+                  when f1.scores->>value is null and f2.scores->>value is null then 0
+                  when f1.scores->>value is null then -1
+                  when f2.scores->>value is null then 1
+                  else
+                    case
+                      when f1.scores->>value = f2.scores->>value then 0
+                      when f1.scores->>value > f2.scores->>value then 1
+                      when f1.scores->>value < f2.scores->>value then -1
+                    end * case
+                      when wods.wod_config->value->>'order' = 'asc' then -1
+                      when wods.wod_config->value->>'order' = 'desc' then 1
+                      else  0
+                    end
+                end, 0), ''), 1, 1) comparison
+            from submissions f2
+            left join generate_series(0, max(json_array_length(wods.wod_config)-1, 0)) on true
+            where coalesce(f2.submission_id, 0) != coalesce(f1.submission_id, 0)
+              and f2.wod_id = f1.wod_id
+              and f2.athlete = f1.athlete
+              and f2.division_id = f1.division_id
+            group by f2.submission_id
+          ) subq
+          where comparison = '-'
         ) submission_rank
-      from submissions
-      left join wods on wods.wod_id = submissions.wod_id
-      left join competitions on wods.competition_id = competitions.competition_id
+      from submissions f1
+      left join wods on wods.wod_id = f1.wod_id
+      left join competitions on competitions.competition_id = wods.competition_id
       where competition_handle = $competition_handle
     ),
     athletes as (
