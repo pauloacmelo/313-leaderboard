@@ -4,7 +4,6 @@ import type {
   MetaFunction,
 } from "@remix-run/cloudflare";
 import { redirect, useLoaderData } from "@remix-run/react";
-import { useState } from "react";
 import styles from "~/styles/table.css?url";
 
 export const meta: MetaFunction = () => {

@@ -1,4 +1,4 @@
-import { Client, createClient } from "@libsql/client";
+import { Client, createClient, InArgs } from "@libsql/client";
 import {
   createCookieSessionStorage,
   type AppLoadContext,
@@ -181,12 +181,18 @@ const api = (client: Client) => ({
       from best_submissions
     ),
     full_submissions as (
-      select *
+      select
+        wods.*,
+        athletes.*,
+        best_submissions.submission_id,
+        coalesce(best_submissions.scores, json_array()) scores,
+        best_submissions.score_label,
+        best_submissions.wod_date
       from wods
       inner join athletes on true
-      full join best_submissions on wods.wod_id = best_submissions.wod_id and best_submissions.athlete = athletes.athlete
+      left join best_submissions on wods.wod_id = best_submissions.wod_id and best_submissions.athlete = athletes.athlete and best_submissions.division_id = athletes.division_id
       left join competitions on wods.competition_id = competitions.competition_id
-      where submission_rank = 1
+      where coalesce(submission_rank, 1) = 1
     ),
     ranked_submissions as (
       select f1.*,
@@ -196,17 +202,23 @@ const api = (client: Client) => ({
             select
               f2.submission_id, substr(string_agg(nullif(
                 case
-                  when f1.scores->>value = f2.scores->>value then 0
-                  when f1.scores->>value > f2.scores->>value then 1
-                  when f1.scores->>value < f2.scores->>value then -1
-                end * case
-                  when f1.wod_config->value->>'order' = 'asc' then -1
-                  when f1.wod_config->value->>'order' = 'desc' then 1
-                  else  0
+                  when f1.scores->>value is null and f2.scores->>value is null then 0
+                  when f1.scores->>value is null then -1
+                  when f2.scores->>value is null then 1
+                  else
+                    case
+                      when f1.scores->>value = f2.scores->>value then 0
+                      when f1.scores->>value > f2.scores->>value then 1
+                      when f1.scores->>value < f2.scores->>value then -1
+                    end * case
+                      when f1.wod_config->value->>'order' = 'asc' then -1
+                      when f1.wod_config->value->>'order' = 'desc' then 1
+                      else  0
+                    end
                 end, 0), ''), 1, 1) comparison
             from full_submissions f2
-            left join generate_series(0, json_array_length(f1.wod_config)-1) on true
-            where f2.submission_id != f1.submission_id
+            left join generate_series(0, max(json_array_length(f1.wod_config)-1, 0)) on true
+            where coalesce(f2.submission_id, 0) != coalesce(f1.submission_id, 0)
               and f2.wod_id = f1.wod_id
               and f2.division_id = f1.division_id
             group by f2.submission_id
@@ -252,42 +264,73 @@ const api = (client: Client) => ({
     score_label,
     wod_date,
   }) => {
-    return submission_id
-      ? await client.execute({
-          sql: `
-        update submissions
-        set
-          athlete = $athlete,
-          wod_id = $wod_id,
-          division_id = $division_id,
-          scores = $scores,
-          score_label = $score_label,
-          wod_date = $wod_date
-        where submission_id = $submission_id;
-      `,
-          args: {
-            athlete,
-            wod_id,
-            division_id,
-            scores,
-            score_label,
-            wod_date,
-            submission_id,
-          },
-        })
-      : await client.execute({
-          sql: `
-        insert into submissions (athlete, wod_id, division_id, scores, score_label, wod_date)
-        values ($athlete, $wod_id, $division_id, $scores, $score_label, $wod_date);
-      `,
-          args: {
-            athlete,
-            wod_id,
-            division_id,
-            scores,
-            score_label,
-            wod_date,
-          },
-        });
+    return await client.execute(
+      save(
+        "submissions",
+        removeUndefined({
+          athlete,
+          wod_id,
+          division_id,
+          scores,
+          score_label,
+          wod_date,
+        }),
+        { submission_id }
+      )
+    );
+  },
+  saveCompetition: async ({
+    competition_id,
+    competition_name,
+    competition_handle,
+    divisions,
+  }) => {
+    return await client.execute(
+      save(
+        "competitions",
+        removeUndefined({ competition_name, competition_handle }),
+        { competition_id }
+      )
+    );
   },
 });
+
+function removeUndefined(obj: Record<string, any>) {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([_, v]) => v !== undefined)
+  );
+}
+function save(table_name: string, setFields: InArgs, conditions: InArgs) {
+  return Object.values(conditions).some(Boolean)
+    ? update(table_name, setFields, conditions)
+    : insert(table_name, setFields);
+}
+function update(table_name: string, setFields: InArgs, conditions: InArgs) {
+  const conditionStr = Object.keys(conditions)
+    .map((key) => `${key} = $${key}`)
+    .join(" and ");
+  const fields = Object.keys(setFields)
+    .map((key) => `${key} = $${key}`)
+    .join(", ");
+  return {
+    sql: `update ${table_name}
+    set ${fields}
+    where ${conditionStr}
+`,
+    args: {
+      ...setFields,
+      ...conditions,
+    },
+  };
+}
+function insert(table_name: string, fields: InArgs) {
+  return {
+    sql: `
+      insert into ${table_name} (${Object.keys(fields).join(", ")})
+      values (${Object.keys(fields)
+        .map((x) => `$${x}`)
+        .join(", ")});
+    `,
+    args: fields,
+  };
+}
