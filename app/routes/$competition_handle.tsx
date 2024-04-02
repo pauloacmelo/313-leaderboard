@@ -61,6 +61,7 @@ export default function Index() {
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
+          margin: "0 10px",
         }}
       >
         <h1>{competition.competition_name}</h1>
@@ -98,22 +99,68 @@ export default function Index() {
       <table>
         <thead>
           <tr>
-            <th>#</th>
+            <th className="desktop-only-columns">#</th>
             <th>ATLETA</th>
-            <th>PTS</th>
+            <th className="desktop-only-columns">PTS</th>
             {competition?.wods?.map((w) => (
-              <th key={w.wod_id}>{w.wod_name}</th>
+              <th key={w.wod_id} className="desktop-only-columns">
+                {w.wod_name}
+              </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {ranking
             .filter((r) => r.division_id === division_id)
-            .map((r, i) => (
+            .flatMap((r, i) => [
               <tr key={i}>
-                <td data-column="#">{r.rank}</td>
-                <td data-column="ATLETA">{r.athlete}</td>
-                <td data-column="PTS">{r.points}</td>
+                <td className="mobile-cell">
+                  <input
+                    id={`collapsible-${i}`}
+                    className="toggle"
+                    type="checkbox"
+                  />
+                  <label htmlFor={`collapsible-${i}`} className="lbl-toggle">
+                    {r.rank}&nbsp;&nbsp;&nbsp;({r.points})&nbsp;{r.athlete}
+                  </label>
+                  <div className="collapsible-content">
+                    <div className="content-inner">
+                      {competition.wods.map((w) => {
+                        const submission = r.submissions.find(
+                          (s) => s.wod_id === w.wod_id
+                        );
+                        const label = submission?.score_label
+                          ? `(${submission?.score_label})`
+                          : "-";
+                        return (
+                          <p key={w.wod_id}>
+                            {w.wod_name}:&nbsp;{submission?.wod_rank}º&nbsp;
+                            <MaybeLink
+                              href={
+                                !userId
+                                  ? null
+                                  : submission?.submission_id
+                                  ? `/${competition.competition_handle}/add?id=${submission?.submission_id}`
+                                  : `/${competition.competition_handle}/add?&wod_id=${w.wod_id}&athlete=${r.athlete}&division_id=${r.division_id}`
+                              }
+                              label={label}
+                            />
+                          </p>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </td>
+
+                <td className="desktop-cell" data-column="#">
+                  {r.rank}
+                </td>
+                <td className="desktop-cell" data-column="ATLETA">
+                  {r.athlete}
+                </td>
+                <td className="desktop-cell" data-column="PTS">
+                  {r.points}
+                </td>
                 {competition.wods.map((w) => {
                   const submission = r.submissions.find(
                     (s) => s.wod_id === w.wod_id
@@ -122,7 +169,11 @@ export default function Index() {
                     ? `(${submission?.score_label})`
                     : "-";
                   return (
-                    <td data-column={w.wod_name} key={w.wod_id}>
+                    <td
+                      className="desktop-cell"
+                      data-column={w.wod_name}
+                      key={w.wod_id}
+                    >
                       {submission?.wod_rank}
                       <br />
                       <MaybeLink
@@ -138,14 +189,14 @@ export default function Index() {
                     </td>
                   );
                 })}
-              </tr>
-            ))}
+              </tr>,
+            ])}
         </tbody>
       </table>
     </div>
   );
 }
 
-function MaybeLink({ href, label }: { href: string; label: string }) {
+function MaybeLink({ href, label }: { href: string | null; label: string }) {
   return href ? <a href={href}>{label}</a> : <span>{label}</span>;
 }
