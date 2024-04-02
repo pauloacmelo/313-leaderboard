@@ -73,6 +73,10 @@ th {
     overflow: hidden;
     transition: max-height 0.25s ease-in-out;
   }
+  .lbl-toggle {
+    display: block;
+    width: 100%;
+  }
   .toggle:checked + .lbl-toggle + .collapsible-content {
     max-height: 350px;
   }
@@ -85,5 +89,6 @@ th {
   }
   .collapsible-content p {
     margin-bottom: 0;
+    margin-top: 0;
   }
 }
