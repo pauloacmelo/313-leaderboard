@@ -30,6 +30,11 @@ CREATE TABLE submissions (
   FOREIGN KEY (division_id) REFERENCES divisions(division_id),
   FOREIGN KEY (wod_id) REFERENCES wods(wod_id)
 );
+CREATE TABLE users (
+  user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_email TEXT
+);
+insert into users (user_id, user_email) values (1, 'pauloacmelo@gmail.com');
 ALTER TABLE submissions ADD COLUMN division_id INTEGER;
 ALTER TABLE submissions DROP COLUMN score_number;
 ALTER TABLE submissions ADD COLUMN scores JSONB;

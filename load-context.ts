@@ -5,6 +5,7 @@ import {
   SessionData,
 } from "@remix-run/cloudflare";
 import { type PlatformProxy } from "wrangler";
+import jsonwebtoken from "jsonwebtoken";
 
 // When using `wrangler.toml` to configure bindings,
 // `wrangler types` will generate types for those bindings
@@ -13,6 +14,8 @@ import { type PlatformProxy } from "wrangler";
 // even if no `wrangler.toml` exists.
 interface Env {
   TURSO_TOKEN: string;
+  RESEND_TOKEN: string;
+  SECRET_KEY: string;
 }
 
 type Cloudflare = Omit<PlatformProxy<Env>, "dispose">;
@@ -54,17 +57,64 @@ export const getLoadContext: GetLoadContext = ({ context, request }) => {
         secure: true,
       },
     });
+  const jwtFunctions = jwt(
+    context.cloudflare.env.SECRET_KEY || process.env.SECRET_KEY || "secret"
+  );
   return {
     ...context,
     api: api(client),
+    jwt: jwtFunctions,
     getSession,
     commitSession,
     destroySession,
+    sendEmail,
     getUserId: async () =>
       (await getSession(request.headers.get("Cookie"))).get("userId"),
   };
+
+  async function sendEmail({
+    to,
+    subject,
+    html,
+  }: {
+    to: string;
+    subject: string;
+    html: string;
+  }) {
+    const token =
+      context.cloudflare.env.RESEND_TOKEN || process.env.RESEND_TOKEN;
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "onboarding@resend.dev",
+        to,
+        subject,
+        html,
+      }),
+    });
+  }
 };
 
+const jwt = (key: string) => ({
+  encryptJWT: ({
+    user_id,
+    user_email,
+  }: {
+    user_id: string;
+    user_email: string;
+  }): string => jsonwebtoken.sign({ user_id, user_email }, key),
+  decryptJWT: (token: string) => {
+    try {
+      return jsonwebtoken.verify(token, key);
+    } catch (_) {
+      return null;
+    }
+  },
+});
 const api = (client: Client) => {
   return {
     loadCompetitions,
@@ -75,7 +125,39 @@ const api = (client: Client) => {
     saveSubmission,
     updateRanking,
     saveCompetition,
+    loadUsers,
+    saveUser,
+    destroyUser,
   };
+  async function loadUsers(args) {
+    const { user_email } = args || {};
+    const sql = `select * from users where true ${
+      user_email ? "and user_email = $user_email" : ""
+    }`;
+    return (
+      await client.execute({
+        sql,
+        args: removeUndefined({ user_email }),
+      })
+    ).rows;
+  }
+  async function destroyUser({ user_id }) {
+    await client.execute({
+      sql: `delete from users where user_id = $user_id`,
+      args: { user_id },
+    });
+  }
+  async function saveUser({ user_id, user_email }) {
+    return await client.execute(
+      save(
+        "users",
+        removeUndefined({
+          user_email,
+        }),
+        { user_id }
+      )
+    );
+  }
 
   async function loadCompetitions() {
     const result = (await client.execute(`select * from competitions`)).rows;

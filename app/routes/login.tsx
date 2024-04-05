@@ -12,9 +12,24 @@ export const links: LinksFunction = () => [
   },
 ];
 
-export const loader = async ({ context }: LoaderFunctionArgs) => {
+export const loader = async ({ context, request }: LoaderFunctionArgs) => {
+  if (await context.getUserId()) return redirect("/");
+  const searchParams = new URL(request.url).searchParams;
+  const token = searchParams.get("token");
+  if (!token) return {};
+  const jwtUser = context.jwt.decryptJWT(token) || {};
+  const user_email = jwtUser?.user_email;
+  if (!user_email) return {};
+  const [user] = await context.api.loadUsers({ user_email });
+  if (user?.user_id !== jwtUser?.user_id) return {};
   const session = await context.getSession();
-  if (session.get("userId")) return redirect("/");
+  await session.set("userId", user?.user_id);
+  return redirect("/", {
+    headers: {
+      "Set-Cookie": await context.commitSession(session),
+    },
+  });
+
   return {};
 };
 export default function Index() {
@@ -29,36 +44,72 @@ export default function Index() {
     >
       <h1>Login</h1>
 
-      <form
-        action="/login"
-        className="pure-form pure-form-stacked"
-        method="post"
-      >
-        <fieldset>
-          <label htmlFor="stacked-user">User</label>
-          <input id="stacked-user" name="user" />
-          <label htmlFor="stacked-password">Password</label>
-          <input type="password" id="stacked-password" name="password" />
+      <div style={{ display: "flex", flexDirection: "row" }}>
+        <form
+          action="/login"
+          className="pure-form pure-form-stacked"
+          method="post"
+          style={{ width: "50%" }}
+        >
+          <fieldset>
+            <input type="hidden" name="type" defaultValue="passwordfull" />
+            <label htmlFor="stacked-user">User</label>
+            <input id="stacked-user" name="user" />
+            <label htmlFor="stacked-password">Password</label>
+            <input type="password" id="stacked-password" name="password" />
+            <br />
+            <button type="submit" className="pure-button pure-button-primary">
+              Submit
+            </button>
+          </fieldset>
+        </form>
+        <form
+          action="/login"
+          className="pure-form pure-form-stacked"
+          method="post"
+          style={{ width: "50%" }}
+        >
+          <input type="hidden" name="type" defaultValue="passwordless" />
+          <label htmlFor="stacked-user">Email</label>
+          <input type="email" id="stacked-user" name="user" />
           <br />
           <button type="submit" className="pure-button pure-button-primary">
             Submit
           </button>
-        </fieldset>
-      </form>
+        </form>
+      </div>
     </div>
   );
 }
 
 export const action = async ({ request, context }: ActionFunctionArgs) => {
   const formData = await request.formData();
-  const [user, password] = [
+  const [type, user, password] = [
+    formData.get("type"),
     formData.get("user"),
     formData.get("password"),
   ] as string[];
-  const session = await context.getSession();
-  await session.set("userId", 1);
-  if (user !== "crossbox313" || password !== "open2024")
+  if (type !== "passwordfull" && type !== "passwordless")
     return redirect("/login");
+  const session = await context.getSession();
+  if (type === "passwordfull") {
+    await session.set("userId", 1);
+    if (user !== "crossbox313" || password !== "open2024")
+      return redirect("/login");
+  } else if (type === "passwordless") {
+    const [dbUser] = await context.api.loadUsers({ user_email: user });
+    if (dbUser) {
+      const token = context.jwt.encryptJWT(dbUser);
+      await context.sendEmail({
+        to: user,
+        subject: `Crossbox 313 - Login - ${new Date().toString().slice(4, 10)}`,
+        html: `
+          <p>Click on the following <a href="http://localhost:5173/login?token=${token}">link to login</a></p>
+        `,
+      });
+    }
+    return redirect("/login");
+  }
   return redirect("/", {
     headers: {
       "Set-Cookie": await context.commitSession(session),
