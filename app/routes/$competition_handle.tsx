@@ -68,28 +68,30 @@ export default function Index() {
         <h1>{competition.competition_name}</h1>
         <div>
           <a href="/">Voltar</a>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-          <a
-            href="#"
-            onClick={() =>
-              fetcher.submit(
-                {},
-                {
-                  method: "POST",
-                  action: `/${competition.competition_handle}/update`,
-                }
-              )
-            }
-          >
-            Atualizar Ranking
-          </a>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
           {userId && (
-            <a
-              href={`/${competition.competition_handle}/add?division_id=${division_id}`}
-            >
-              Nova súmula
-            </a>
+            <>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              <a
+                href="#"
+                onClick={() =>
+                  fetcher.submit(
+                    {},
+                    {
+                      method: "POST",
+                      action: `/${competition.competition_handle}/update`,
+                    }
+                  )
+                }
+              >
+                Atualizar Ranking
+              </a>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              <a
+                href={`/${competition.competition_handle}/add?division_id=${division_id}`}
+              >
+                Nova súmula
+              </a>
+            </>
           )}
         </div>
       </div>
