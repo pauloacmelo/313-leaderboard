@@ -104,7 +104,9 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
         to: user,
         subject: `Crossbox 313 - Login - ${new Date().toString().slice(4, 10)}`,
         html: `
-          <p>Click on the following <a href="http://localhost:5173/login?token=${token}">link to login</a></p>
+          <p>Click on the following <a href="${
+            new URL(request.url).origin
+          }/login?token=${token}">link to login</a></p>
         `,
       });
     }
