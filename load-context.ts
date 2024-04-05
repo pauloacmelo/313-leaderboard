@@ -65,37 +65,48 @@ export const getLoadContext: GetLoadContext = ({ context, request }) => {
   };
 };
 
-const api = (client: Client) => ({
-  loadCompetitions: async () => {
+const api = (client: Client) => {
+  return {
+    loadCompetitions,
+    loadCompetitionByHandle,
+    loadSubmissionsByHandle,
+    loadSubmissionById,
+    loadRankingByHandle,
+    saveSubmission,
+    updateRanking,
+    saveCompetition,
+  };
+
+  async function loadCompetitions() {
     const result = (await client.execute(`select * from competitions`)).rows;
     return result;
-  },
-  loadCompetitionByHandle: async (competition_handle) => {
+  }
+  async function loadCompetitionByHandle(competition_handle) {
     const result = (
       await client.execute({
         sql: `
-          select
-            competitions.*,
-            json_group_array(
-              json_object(
-                'wod_id', wod_id,
-                'wod_name', wod_name,
-                'wod_description', wod_description,
-                'wod_config', wod_config
+        select
+          competitions.*,
+          json_group_array(
+            json_object(
+              'wod_id', wod_id,
+              'wod_name', wod_name,
+              'wod_description', wod_description,
+              'wod_config', wod_config
+            )
+          ) wods,
+          (
+            select 
+              json_group_array(
+                json_object('division_id', division_id, 'division_name', division_name)
               )
-            ) wods,
-            (
-              select 
-                json_group_array(
-                  json_object('division_id', division_id, 'division_name', division_name)
-                )
-              from divisions where competition_id = competitions.competition_id
-            ) divisions
-          from competitions
-          left join wods on wods.competition_id = competitions.competition_id
-          where competition_handle = $competition_handle
-          group by competitions.competition_id;
-        `,
+            from divisions where competition_id = competitions.competition_id
+          ) divisions
+        from competitions
+        left join wods on wods.competition_id = competitions.competition_id
+        where competition_handle = $competition_handle
+        group by competitions.competition_id;
+      `,
         args: { competition_handle },
       })
     ).rows[0];
@@ -115,36 +126,36 @@ const api = (client: Client) => ({
           : {}),
       }
     );
-  },
-  loadSubmissionsByHandle: async (competition_handle) => {
+  }
+  async function loadSubmissionsByHandle(competition_handle) {
     const result = (
       await client.execute({
         sql: `
-          select
-            submissions.*
-          from submissions
-          left join wods on wods.wod_id = submissions.wod_id
-          left join competitions on competitions.competition_id = wods.competition_id
-          where competition_handle = $competition_handle
-          order by wod_id, wod_date desc;
-        `,
+        select
+          submissions.*
+        from submissions
+        left join wods on wods.wod_id = submissions.wod_id
+        left join competitions on competitions.competition_id = wods.competition_id
+        where competition_handle = $competition_handle
+        order by wod_id, wod_date desc;
+      `,
         args: { competition_handle },
       })
     ).rows;
     return result;
-  },
-  loadSubmissionById: async (submission_id) => {
+  }
+  async function loadSubmissionById(submission_id) {
     const result = (
       await client.execute({
         sql: `
-          select
-            submissions.*
-          from submissions
-          left join wods on wods.wod_id = submissions.wod_id
-          left join competitions on competitions.competition_id = wods.competition_id
-          where submission_id = $submission_id
-          order by wod_id, wod_date desc;
-        `,
+        select
+          submissions.*
+        from submissions
+        left join wods on wods.wod_id = submissions.wod_id
+        left join competitions on competitions.competition_id = wods.competition_id
+        where submission_id = $submission_id
+        order by wod_id, wod_date desc;
+      `,
         args: { submission_id },
       })
     ).rows[0];
@@ -152,119 +163,11 @@ const api = (client: Client) => ({
       ...result,
       scores: result.scores ? JSON.parse(result.scores) : result.scores,
     };
-  },
-  loadRankingByHandle: async (competition_handle) => {
+  }
+  async function loadRankingByHandle(competition_handle) {
     const result = (
       await client.execute({
-        sql: `
-      with best_submissions as (
-        select f1.*,
-        (
-          select count(*) + 1 --string_agg(submission_id || ':' || comparison, '|')
-          from (
-            select
-              f2.submission_id, substr(string_agg(nullif(
-                case
-                  when f1.scores->>value is null and f2.scores->>value is null then 0
-                  when f1.scores->>value is null then -1
-                  when f2.scores->>value is null then 1
-                  else
-                    case
-                      when f1.scores->>value = f2.scores->>value then 0
-                      when f1.scores->>value > f2.scores->>value then 1
-                      when f1.scores->>value < f2.scores->>value then -1
-                    end * case
-                      when wods.wod_config->value->>'order' = 'asc' then -1
-                      when wods.wod_config->value->>'order' = 'desc' then 1
-                      else  0
-                    end
-                end, 0), ''), 1, 1) comparison
-            from submissions f2
-            left join generate_series(0, max(json_array_length(wods.wod_config)-1, 0)) on true
-            where coalesce(f2.submission_id, 0) != coalesce(f1.submission_id, 0)
-              and f2.wod_id = f1.wod_id
-              and f2.athlete = f1.athlete
-              and f2.division_id = f1.division_id
-            group by f2.submission_id
-          ) subq
-          where comparison = '-'
-        ) submission_rank
-      from submissions f1
-      left join wods on wods.wod_id = f1.wod_id
-      left join competitions on competitions.competition_id = wods.competition_id
-      where competition_handle = $competition_handle
-    ),
-    athletes as (
-      select distinct athlete, division_id
-      from best_submissions
-    ),
-    full_submissions as (
-      select
-        wods.*,
-        athletes.*,
-        best_submissions.submission_id,
-        coalesce(best_submissions.scores, json_array()) scores,
-        best_submissions.score_label,
-        best_submissions.wod_date
-      from wods
-      inner join athletes on true
-      left join best_submissions on wods.wod_id = best_submissions.wod_id and best_submissions.athlete = athletes.athlete and best_submissions.division_id = athletes.division_id
-      left join competitions on wods.competition_id = competitions.competition_id
-      where coalesce(submission_rank, 1) = 1
-    ),
-    ranked_submissions as (
-      select f1.*,
-        (
-          select count(*) + 1 --string_agg(submission_id || ':' || comparison, '|')
-          from (
-            select
-              f2.submission_id, substr(string_agg(nullif(
-                case
-                  when f1.scores->>value is null and f2.scores->>value is null then 0
-                  when f1.scores->>value is null then -1
-                  when f2.scores->>value is null then 1
-                  else
-                    case
-                      when f1.scores->>value = f2.scores->>value then 0
-                      when f1.scores->>value > f2.scores->>value then 1
-                      when f1.scores->>value < f2.scores->>value then -1
-                    end * case
-                      when f1.wod_config->value->>'order' = 'asc' then -1
-                      when f1.wod_config->value->>'order' = 'desc' then 1
-                      else  0
-                    end
-                end, 0), ''), 1, 1) comparison
-            from full_submissions f2
-            left join generate_series(0, max(json_array_length(f1.wod_config)-1, 0)) on true
-            where coalesce(f2.submission_id, 0) != coalesce(f1.submission_id, 0)
-              and f2.wod_id = f1.wod_id
-              and f2.division_id = f1.division_id
-            group by f2.submission_id
-          ) subq
-          where comparison = '-'
-        ) wod_rank
-      from full_submissions f1
-    )
-    select
-      athlete,
-      division_id,
-      row_number() over (partition by division_id order by sum(wod_rank)) rank,
-      sum(wod_rank) points,
-      json_group_array(
-        json_object(
-          'athlete', athlete,
-          'wod_id', wod_id,
-          'wod_name', wod_name,
-          'wod_rank', wod_rank,
-          'submission_id', submission_id,
-          'scores', scores,
-          'score_label', score_label
-        )
-      ) submissions
-    from ranked_submissions
-    group by athlete, division_id
-    order by sum(wod_rank);
-    `,
+        sql: `select * from rankings where competition_handle = $competition_handle;`,
         args: { competition_handle },
       })
     ).rows;
@@ -272,8 +175,8 @@ const api = (client: Client) => ({
       ...row,
       ...(row.submissions ? { submissions: JSON.parse(row.submissions) } : {}),
     }));
-  },
-  saveSubmission: async ({
+  }
+  async function saveSubmission({
     submission_id,
     athlete,
     wod_id,
@@ -281,8 +184,8 @@ const api = (client: Client) => ({
     scores,
     score_label,
     wod_date,
-  }) => {
-    return await client.execute(
+  }) {
+    const result = await client.execute(
       save(
         "submissions",
         removeUndefined({
@@ -296,13 +199,142 @@ const api = (client: Client) => ({
         { submission_id }
       )
     );
-  },
-  saveCompetition: async ({
+    const { competition_handle } = (
+      await client.execute({
+        sql: `select competition_handle from wods left join competitions on competitions.competition_id = wods.competition_id where wod_id = $wod_id`,
+        args: { wod_id },
+      })
+    ).rows[0];
+    await updateRanking({ competition_handle });
+    return result;
+  }
+  async function updateRanking({ competition_handle }) {
+    await client.execute({
+      sql: `delete from rankings where competition_handle = $competition_handle`,
+      args: { competition_handle },
+    });
+    await client.execute({
+      sql: `
+  insert into rankings (competition_handle, athlete, division_id, rank, points, submissions)
+  with best_submissions as (
+    select f1.*,
+      (
+        select count(*) + 1 --string_agg(submission_id || ':' || comparison, '|')
+        from (
+          select
+            f2.submission_id, substr(string_agg(nullif(
+              case
+                when f1.scores->>value is null and f2.scores->>value is null then 0
+                when f1.scores->>value is null then -1
+                when f2.scores->>value is null then 1
+                else
+                  case
+                    when f1.scores->>value = f2.scores->>value then 0
+                    when f1.scores->>value > f2.scores->>value then 1
+                    when f1.scores->>value < f2.scores->>value then -1
+                  end * case
+                    when wods.wod_config->value->>'order' = 'asc' then -1
+                    when wods.wod_config->value->>'order' = 'desc' then 1
+                    else  0
+                  end
+              end, 0), ''), 1, 1) comparison
+          from submissions f2
+          left join generate_series(0, max(json_array_length(wods.wod_config)-1, 0)) on true
+          where coalesce(f2.submission_id, 0) != coalesce(f1.submission_id, 0)
+            and f2.wod_id = f1.wod_id
+            and f2.athlete = f1.athlete
+            and f2.division_id = f1.division_id
+          group by f2.submission_id
+        ) subq
+        where comparison = '-'
+      ) submission_rank
+    from submissions f1
+    left join wods on wods.wod_id = f1.wod_id
+    left join competitions on competitions.competition_id = wods.competition_id
+    where competition_handle = $competition_handle
+  ),
+  athletes as (
+    select distinct athlete, division_id
+    from best_submissions
+  ),
+  full_submissions as (
+    select
+      competitions.competition_handle,
+      wods.*,
+      athletes.*,
+      best_submissions.submission_id,
+      coalesce(best_submissions.scores, json_array()) scores,
+      best_submissions.score_label,
+      best_submissions.wod_date
+    from wods
+    inner join athletes on true
+    left join best_submissions on wods.wod_id = best_submissions.wod_id and best_submissions.athlete = athletes.athlete and best_submissions.division_id = athletes.division_id
+    left join competitions on wods.competition_id = competitions.competition_id
+    where coalesce(submission_rank, 1) = 1
+  ),
+  ranked_submissions as (
+    select f1.*,
+      (
+        select count(*) + 1 --string_agg(submission_id || ':' || comparison, '|')
+        from (
+          select
+            f2.submission_id, substr(string_agg(nullif(
+              case
+                when f1.scores->>value is null and f2.scores->>value is null then 0
+                when f1.scores->>value is null then -1
+                when f2.scores->>value is null then 1
+                else
+                  case
+                    when f1.scores->>value = f2.scores->>value then 0
+                    when f1.scores->>value > f2.scores->>value then 1
+                    when f1.scores->>value < f2.scores->>value then -1
+                  end * case
+                    when f1.wod_config->value->>'order' = 'asc' then -1
+                    when f1.wod_config->value->>'order' = 'desc' then 1
+                    else  0
+                  end
+              end, 0), ''), 1, 1) comparison
+          from full_submissions f2
+          left join generate_series(0, max(json_array_length(f1.wod_config)-1, 0)) on true
+          where coalesce(f2.submission_id, 0) != coalesce(f1.submission_id, 0)
+            and f2.wod_id = f1.wod_id
+            and f2.division_id = f1.division_id
+          group by f2.submission_id
+        ) subq
+        where comparison = '-'
+      ) wod_rank
+    from full_submissions f1
+  )
+  select
+    competition_handle,
+    athlete,
+    division_id,
+    row_number() over (partition by division_id order by sum(wod_rank)) rank,
+    sum(wod_rank) points,
+    json_group_array(
+      json_object(
+        'athlete', athlete,
+        'wod_id', wod_id,
+        'wod_name', wod_name,
+        'wod_rank', wod_rank,
+        'submission_id', submission_id,
+        'scores', scores,
+        'score_label', score_label
+      )
+    ) submissions
+  from ranked_submissions
+  group by athlete, division_id
+  order by sum(wod_rank);
+`,
+      args: { competition_handle },
+    });
+  }
+  async function saveCompetition({
     competition_id,
     competition_name,
     competition_handle,
     divisions,
-  }) => {
+  }) {
     return await client.execute(
       save(
         "competitions",
@@ -310,8 +342,8 @@ const api = (client: Client) => ({
         { competition_id }
       )
     );
-  },
-});
+  }
+};
 
 function removeUndefined(obj: Record<string, any>) {
   return Object.fromEntries(

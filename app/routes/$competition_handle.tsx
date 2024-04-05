@@ -3,7 +3,7 @@ import type {
   LoaderFunctionArgs,
   MetaFunction,
 } from "@remix-run/cloudflare";
-import { redirect, useLoaderData } from "@remix-run/react";
+import { redirect, useFetcher, useLoaderData } from "@remix-run/react";
 import styles from "~/styles/table.css?url";
 
 export const meta: MetaFunction = () => {
@@ -46,6 +46,7 @@ export default function Index() {
   const division_id = parseInt(
     url_division_id || competition.divisions?.[0]?.division_id
   );
+  const fetcher = useFetcher();
   return (
     <div
       style={{
@@ -67,6 +68,21 @@ export default function Index() {
         <h1>{competition.competition_name}</h1>
         <div>
           <a href="/">Voltar</a>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+          <a
+            href="#"
+            onClick={() =>
+              fetcher.submit(
+                {},
+                {
+                  method: "POST",
+                  action: `/${competition.competition_handle}/update`,
+                }
+              )
+            }
+          >
+            Atualizar Ranking
+          </a>
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
           {userId && (
             <a
