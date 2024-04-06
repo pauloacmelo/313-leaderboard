@@ -51,7 +51,7 @@ export const loader = async ({
     submission,
   };
 };
-export default function Index() {
+export default function AddSubmission() {
   const { competition, submission } = useLoaderData<typeof loader>();
   const [wod_id, setWodId] = useState(
     submission?.wod_id || competition.wods[0].wod_id
@@ -123,8 +123,11 @@ export default function Index() {
             ))}
           </select>
           {wod?.wod_config?.map((config, scoreIndex) => (
-            <>
-              <label htmlFor={`stacked-score-${scoreIndex}`}>
+            <div key={scoreIndex}>
+              <label
+                htmlFor={`stacked-score-${scoreIndex}`}
+                key={`label-${scoreIndex}`}
+              >
                 {config.label}
               </label>
               <input
@@ -132,9 +135,16 @@ export default function Index() {
                 id={`stacked-score-${scoreIndex}`}
                 name="scores"
                 defaultValue={submission?.scores?.[scoreIndex]}
-                placeholder={config.type === "time" ? "12:34" : "123"}
+                placeholder={
+                  config.type === "time"
+                    ? "12:34"
+                    : config.type == "number"
+                    ? "123"
+                    : "RX / SCALED"
+                }
+                key={`input-${scoreIndex}`}
               />
-            </>
+            </div>
           ))}
           <label htmlFor="stacked-label">Descrição ranking</label>
           <input

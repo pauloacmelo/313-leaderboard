@@ -62,3 +62,4 @@ npm run deploy
 - [ ] Add Documentation
 - [ ] Make it live using websockets
 - [ ] Animation for ranking change
+- [ ] Order by each wod

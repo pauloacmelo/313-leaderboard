@@ -21,7 +21,6 @@
     "@remix-run/cloudflare-pages": "^2.8.1",
     "@remix-run/react": "^2.8.1",
     "isbot": "^4.1.0",
-    "jsonwebtoken": "^9.0.2",
     "miniflare": "^3.20231030.4",
     "ramda": "^0.29.1",
     "react": "^18.2.0",
@@ -30,7 +29,6 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240320.1",
     "@remix-run/dev": "^2.8.1",
-    "@types/jsonwebtoken": "^9.0.6",
     "@types/ramda": "^0.29.12",
     "@types/react": "^18.2.20",
     "@types/react-dom": "^18.2.7",

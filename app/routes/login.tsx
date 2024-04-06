@@ -99,14 +99,19 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
   } else if (type === "passwordless") {
     const [dbUser] = await context.api.loadUsers({ user_email: user });
     if (dbUser) {
-      const token = context.jwt.encryptJWT(dbUser);
+      const token = context.jwt.encryptJWT({
+        ...dbUser,
+        exp: (Date.now() + 1000 * 60 * 30) / 1000, // 30 minute expiring
+      });
       await context.sendEmail({
         to: user,
         subject: `Crossbox 313 - Login - ${new Date().toString().slice(4, 10)}`,
         html: `
-          <p>Click on the following <a href="${
+          <p>Clique no seguinte <a href="${
             new URL(request.url).origin
-          }/login?token=${token}">link to login</a></p>
+          }/login?token=${token}">link para entrar</a>.</p>
+          <br/><br/>
+          <i>(Este link é válido por 30 minutos)</i>
         `,
       });
     }

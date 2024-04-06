@@ -5,7 +5,7 @@ import {
   SessionData,
 } from "@remix-run/cloudflare";
 import { type PlatformProxy } from "wrangler";
-import jsonwebtoken from "jsonwebtoken";
+import crypto from "node:crypto";
 
 // When using `wrangler.toml` to configure bindings,
 // `wrangler types` will generate types for those bindings
@@ -57,13 +57,13 @@ export const getLoadContext: GetLoadContext = ({ context, request }) => {
         secure: true,
       },
     });
-  const jwtFunctions = jwt(
-    context.cloudflare.env.SECRET_KEY || process.env.SECRET_KEY || "secret"
-  );
+
   return {
     ...context,
     api: api(client),
-    jwt: jwtFunctions,
+    jwt: jwt(
+      context.cloudflare.env.SECRET_KEY || process.env.SECRET_KEY || "secret"
+    ),
     getSession,
     commitSession,
     destroySession,
@@ -99,22 +99,6 @@ export const getLoadContext: GetLoadContext = ({ context, request }) => {
   }
 };
 
-const jwt = (key: string) => ({
-  encryptJWT: ({
-    user_id,
-    user_email,
-  }: {
-    user_id: string;
-    user_email: string;
-  }): string => jsonwebtoken.sign({ user_id, user_email }, key),
-  decryptJWT: (token: string) => {
-    try {
-      return jsonwebtoken.verify(token, key);
-    } catch (_) {
-      return null;
-    }
-  },
-});
 const api = (client: Client) => {
   return {
     loadCompetitions,
@@ -466,3 +450,144 @@ function insert(table_name: string, fields: InArgs) {
     args: fields,
   };
 }
+
+type Algorithm = "HS256" | "HS384" | "HS512" | "RS256";
+const algorithmMap = {
+  HS256: "sha256",
+  HS384: "sha384",
+  HS512: "sha512",
+  RS256: "RSA-SHA256",
+} as const;
+const typeMap = {
+  HS256: "hmac",
+  HS384: "hmac",
+  HS512: "hmac",
+  RS256: "sign",
+} as const;
+const jwt = (jwtKey: string) => {
+  return {
+    version: "0.5.6",
+    encryptJWT: (obj: Record<string, unknown>): string =>
+      jwt_encode(obj, jwtKey),
+    decryptJWT: (token: string) => {
+      try {
+        return jwt_decode(token, jwtKey);
+      } catch (err) {
+        console.log("decode error", err);
+        return null;
+      }
+    },
+  };
+
+  function jwt_decode(token: string, key: string, algorithm?: Algorithm) {
+    if (!token) throw new Error("No token supplied");
+    const segments = token.split(".");
+    if (segments.length !== 3)
+      throw new Error("Not enough or too many segments");
+    const headerSeg = segments[0];
+    const payloadSeg = segments[1];
+    const signatureSeg = segments[2];
+
+    const header = JSON.parse(base64urlDecode(headerSeg));
+    const payload = JSON.parse(base64urlDecode(payloadSeg));
+
+    if (!algorithm && /BEGIN( RSA)? PUBLIC KEY/.test(key.toString()))
+      algorithm = "RS256";
+
+    const coercedAlgorithm = algorithm || (header.alg as Algorithm);
+    const signingMethod = algorithmMap[coercedAlgorithm];
+    const signingType = typeMap[coercedAlgorithm];
+    if (!signingMethod || !signingType)
+      throw new Error("Algorithm not supported");
+    const signingInput = [headerSeg, payloadSeg].join(".");
+    if (!verify(signingInput, key, signingMethod, signingType, signatureSeg))
+      throw new Error("Signature verification failed");
+    if (payload.nbf && Date.now() < payload.nbf * 1000)
+      throw new Error("Token not yet active");
+    if (payload.exp && Date.now() > payload.exp * 1000)
+      throw new Error("Token expired");
+
+    return payload;
+  }
+  function jwt_encode(
+    payload: Record<string, unknown>,
+    key: string,
+    algorithm?: Algorithm,
+    options?: { header: Record<string, unknown> }
+  ) {
+    if (!key) throw new Error("Require key");
+    if (!algorithm) algorithm = "HS256";
+    const signingMethod = algorithmMap[algorithm];
+    const signingType = typeMap[algorithm];
+    if (!signingMethod || !signingType)
+      throw new Error("Algorithm not supported");
+    const header = { typ: "JWT", alg: algorithm };
+    if (options && options.header) {
+      assignProperties(header, options.header);
+    }
+    const segments = [];
+    segments.push(base64urlEncode(JSON.stringify(header)));
+    segments.push(base64urlEncode(JSON.stringify(payload)));
+    segments.push(sign(segments.join("."), key, signingMethod, signingType));
+
+    return segments.join(".");
+  }
+  function assignProperties<T extends Record<string, unknown>>(
+    dest: T,
+    source: T
+  ) {
+    for (const attr in source) {
+      if (source.hasOwnProperty(attr)) {
+        dest[attr] = source[attr];
+      }
+    }
+  }
+  function verify(
+    input: string,
+    key: string,
+    method: (typeof algorithmMap)[Algorithm],
+    type: (typeof typeMap)[Algorithm],
+    signature: string
+  ) {
+    if (type === "hmac") {
+      return signature === sign(input, key, method, type);
+    } else if (type == "sign") {
+      return crypto
+        .createVerify(method)
+        .update(input)
+        .verify(key, base64urlUnescape(signature), "base64");
+    } else {
+      throw new Error("Algorithm type not recognized");
+    }
+  }
+  function sign(
+    input: string,
+    key: string,
+    method: (typeof algorithmMap)[Algorithm],
+    type: (typeof typeMap)[Algorithm]
+  ) {
+    var base64str;
+    if (type === "hmac") {
+      base64str = crypto.createHmac(method, key).update(input).digest("base64");
+    } else if (type == "sign") {
+      base64str = crypto.createSign(method).update(input).sign(key, "base64");
+    } else {
+      throw new Error("Algorithm type not recognized");
+    }
+
+    return base64urlEscape(base64str);
+  }
+  function base64urlDecode(str: string) {
+    return Buffer.from(base64urlUnescape(str), "base64").toString();
+  }
+  function base64urlUnescape(str: string) {
+    str += new Array(5 - (str.length % 4)).join("=");
+    return str.replace(/\-/g, "+").replace(/_/g, "/");
+  }
+  function base64urlEncode(str: string) {
+    return base64urlEscape(Buffer.from(str).toString("base64"));
+  }
+  function base64urlEscape(str: string) {
+    return str.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+  }
+};
