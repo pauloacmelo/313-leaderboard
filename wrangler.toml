@@ -1,5 +1,6 @@
 name = "313-leaderboard"
 compatibility_date = "2024-03-20"
+compatibility_flags = [ "nodejs_compat" ]
 
 # Variable bindings. These are arbitrary, plaintext strings (similar to environment variables)
 # Note: Use secrets to store sensitive data.
